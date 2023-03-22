@@ -2,8 +2,10 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 
@@ -14,6 +16,8 @@ import (
 
 var databases *sql.DB
 
+// ———————————————————————————————— MAIN ————————————————————————————————
+
 func main() {
 	databases = ConnectMySql()
 	if databases != nil {
@@ -22,6 +26,69 @@ func main() {
 		RequestNetwork()
 	}
 }
+
+// ———————————————————————————————— ROUTER ————————————————————————————————
+
+// 监听网络请求
+func RequestNetwork() {
+	r := gin.Default()
+
+	// 添加Cors()中间件 -> 解决跨域问题
+	r.Use(cors.Default())
+
+	r.GET("/", func(ctx *gin.Context) {
+		clientIP := ctx.ClientIP()
+		ctx.JSON(200, gin.H{
+			"clientIP": clientIP,
+		})
+	})
+	r.GET("/game/ranking", func(ctx *gin.Context) {
+		moveDataList := GetGameRanking(true)
+		timeDataList := GetGameRanking(false)
+		ctx.JSON(200, gin.H{
+			"msg":          "success",
+			"moveDataList": moveDataList,
+			"timeDataList": timeDataList,
+		})
+	})
+	r.POST("/game/adddata", func(ctx *gin.Context) {
+		var gameData GameRanking
+		if err := ctx.ShouldBind(&gameData); err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{
+				"msg":   "invalid request body",
+				"error": err,
+			})
+			return
+		}
+		AddGameData(gameData)
+		ctx.JSON(200, gin.H{
+			"msg": "success",
+		})
+	})
+	r.POST("/game/init", func(ctx *gin.Context) {
+		var gamerInfo GamerUserInfo
+		if err := ctx.ShouldBind(&gamerInfo); err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{
+				"msg":   "invalid request body",
+				"error": err.Error(),
+			})
+			return
+		}
+		gamerInfo.IP = ctx.ClientIP()
+		sqlErr := AddGamerData(gamerInfo)
+		errorMessage := ""
+		if sqlErr != nil {
+			errorMessage = sqlErr.Error()
+		}
+		ctx.JSON(200, gin.H{
+			"msg":   "success",
+			"error": errorMessage,
+		})
+	})
+	r.Run(":8081")
+}
+
+// ———————————————————————————————— MODEL ————————————————————————————————
 
 type GameRanking struct {
 	Id          int    `json:"id"`
@@ -36,10 +103,12 @@ type GameRanking struct {
 type GamerUserInfo struct {
 	Id        int    `json:"id"`
 	Name      string `json:"name"`
-	PlayCount int    `json:"playCount"`
+	PlayCount int    `json:"play_count"`
 	Udid      string `json:"udid"`
+	IP        string `json:"ip"`
 }
 
+// ———————————————————————————————— API ————————————————————————————————
 // 获取游戏排名
 func GetGameRanking(isMoveType bool) []GameRanking {
 	// 根据时间排序，获取用时最短的用户列表
@@ -65,6 +134,11 @@ func GetGameRanking(isMoveType bool) []GameRanking {
 // 增加游戏数据
 func AddGameData(networkGameData GameRanking) {
 	var gameData GameRanking = networkGameData
+	fmt.Println(gameData.Name)
+	fmt.Println(gameData.OverTime)
+	fmt.Println(gameData.MoveCount)
+	fmt.Println(gameData.CreatedTime)
+	fmt.Println(gameData.Udid)
 	if (gameData.OverTime > gameData.CreatedTime) && len(gameData.OverTime) > 0 && len(gameData.CreatedTime) > 0 && len(gameData.Udid) == 32 {
 		// 满足添加条件
 		sqlStr := "INSERT INTO yp_gamer_data(gamer_username, gamer_move_count, created_at, gameover_time, uuid) VALUES(?, ?, ?, ?, ?)"
@@ -75,15 +149,29 @@ func AddGameData(networkGameData GameRanking) {
 }
 
 // 增加用户
-func addGamerData(gameUserInfo GamerUserInfo) {
-	// var gamerData GamerUserInfo = gameUserInfo
-	// if len(gamerData.Udid) == 32 {
-	// 	// 满足添加条件
-	// 	sqlStr := "INSERT INTO yp_gamer_data(gamer_username, gamer_move_count, created_at, gameover_time, uuid) VALUES(?, ?, ?, ?, ?)"
-	// 	result, err := databases.Exec(sqlStr, gameData.Name, gameData.MoveCount, gameData.CreatedTime, gameData.OverTime, gameData.Udid)
-	// 	fmt.Println(result)
-	// 	fmt.Println(err)
-	// }
+func AddGamerData(gamer GamerUserInfo) error {
+	if len(gamer.Udid) != 32 {
+		return errors.New("unknown error")
+	}
+	var count int
+	err := databases.QueryRow("SELECT COUNT(*) FROM yp_gamers WHERE uuid = ?", gamer.Udid).Scan(&count)
+	if err != nil {
+		return err
+	}
+	if count > 0 {
+		currentTime := time.Now().Format("2006-01-02 15:04:05.000")
+		_, err = databases.Exec("UPDATE yp_gamers SET play_count = play_count + 1,updated_at = ?  WHERE uuid = ?", currentTime, gamer.Udid)
+		if err != nil {
+			return err
+		}
+	} else {
+		currentTime := time.Now().Format("2006-01-02 15:04:05.000")
+		_, err = databases.Exec("INSERT INTO yp_gamers (name, play_count, uuid, ip, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)", gamer.Name, gamer.PlayCount, gamer.Udid, gamer.IP, currentTime, currentTime)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // 数据初始化
@@ -102,46 +190,4 @@ func ConnectMySql() (db *sql.DB) {
 		return nil
 	}
 	return db
-}
-
-// 监听网络请求
-func RequestNetwork() {
-	r := gin.Default()
-
-	// 添加Cors()中间件 -> 解决跨域问题
-	r.Use(cors.Default())
-
-	r.GET("/", func(ctx *gin.Context) {
-		ctx.JSON(200, gin.H{
-			"msg": "这是go后台传来的",
-		})
-	})
-	r.GET("/game/ranking", func(ctx *gin.Context) {
-		moveDataList := GetGameRanking(true)
-		timeDataList := GetGameRanking(false)
-		ctx.JSON(200, gin.H{
-			"msg":          "success",
-			"moveDataList": moveDataList,
-			"timeDataList": timeDataList,
-		})
-	})
-	r.POST("/game/adddata", func(ctx *gin.Context) {
-		var gameData GameRanking
-		if err := ctx.Bind(&gameData); err != nil {
-			ctx.JSON(http.StatusBadRequest, gin.H{
-				"msg": "invalid request body",
-			})
-			return
-		}
-
-		AddGameData(gameData)
-
-		ctx.JSON(200, gin.H{
-			"msg": "success",
-		})
-	})
-	r.POST("/game/point", func(ctx *gin.Context) {
-
-	})
-	r.Run(":8081")
 }
