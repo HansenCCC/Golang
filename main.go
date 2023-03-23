@@ -109,6 +109,7 @@ type GamerUserInfo struct {
 }
 
 // ———————————————————————————————— API ————————————————————————————————
+
 // 获取游戏排名
 func GetGameRanking(isMoveType bool) []GameRanking {
 	// 根据时间排序，获取用时最短的用户列表
@@ -159,12 +160,14 @@ func AddGamerData(gamer GamerUserInfo) error {
 		return err
 	}
 	if count > 0 {
+		// 存在更新用户信息
 		currentTime := time.Now().Format("2006-01-02 15:04:05.000")
-		_, err = databases.Exec("UPDATE yp_gamers SET play_count = play_count + 1,updated_at = ?  WHERE uuid = ?", currentTime, gamer.Udid)
+		_, err = databases.Exec("UPDATE yp_gamers SET play_count = play_count + 1, updated_at = ?, name = ?  WHERE uuid = ?", currentTime, gamer.Name, gamer.Udid)
 		if err != nil {
 			return err
 		}
 	} else {
+		// 不存在创建用户
 		currentTime := time.Now().Format("2006-01-02 15:04:05.000")
 		_, err = databases.Exec("INSERT INTO yp_gamers (name, play_count, uuid, ip, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)", gamer.Name, gamer.PlayCount, gamer.Udid, gamer.IP, currentTime, currentTime)
 		if err != nil {
