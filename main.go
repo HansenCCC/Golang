@@ -112,9 +112,9 @@ type GamerUserInfo struct {
 // 获取游戏排名
 func GetGameRanking(isMoveType bool) []GameRanking {
 	// 根据时间排序，获取用时最短的用户列表
-	sqlStr := "select id, gamer_username, gamer_move_count, created_at, gameover_time, TIMESTAMPDIFF(SECOND, created_at, gameover_time) AS duration from yp_gamer_data ORDER BY duration ASC LIMIT 20"
+	sqlStr := "SELECT id, gamer_username, gamer_move_count, created_at, gameover_time, TIMESTAMPDIFF(SECOND, created_at, gameover_time) AS duration FROM yp_gamer_data WHERE DATE(gameover_time) = CURDATE() ORDER BY duration ASC LIMIT 20"
 	if isMoveType {
-		sqlStr = "select id, gamer_username, gamer_move_count, created_at, gameover_time, TIMESTAMPDIFF(SECOND, created_at, gameover_time) AS duration from yp_gamer_data ORDER BY gamer_move_count ASC LIMIT 20"
+		sqlStr = "SELECT id, gamer_username, gamer_move_count, created_at, gameover_time, TIMESTAMPDIFF(SECOND, created_at, gameover_time) AS duration FROM yp_gamer_data WHERE DATE(gameover_time) = CURDATE() ORDER BY gamer_move_count ASC LIMIT 20"
 	}
 	dataList, _ := databases.Query(sqlStr)
 	defer dataList.Close()
