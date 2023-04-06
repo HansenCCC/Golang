@@ -36,13 +36,14 @@ func RequestNetwork() {
 	// 添加Cors()中间件 -> 解决跨域问题
 	r.Use(cors.Default())
 
-	r.GET("/", func(ctx *gin.Context) {
+	r.GET("/api", func(ctx *gin.Context) {
 		clientIP := ctx.ClientIP()
 		ctx.JSON(200, gin.H{
 			"clientIP": clientIP,
 		})
 	})
-	r.GET("/game/ranking", func(ctx *gin.Context) {
+
+	r.GET("/api/game/ranking", func(ctx *gin.Context) {
 		moveDataList := GetGameRanking(true)
 		timeDataList := GetGameRanking(false)
 		ctx.JSON(200, gin.H{
@@ -51,7 +52,7 @@ func RequestNetwork() {
 			"timeDataList": timeDataList,
 		})
 	})
-	r.POST("/game/adddata", func(ctx *gin.Context) {
+	r.POST("/api/game/adddata", func(ctx *gin.Context) {
 		var gameData GameRanking
 		if err := ctx.ShouldBind(&gameData); err != nil {
 			ctx.JSON(http.StatusBadRequest, gin.H{
@@ -65,7 +66,7 @@ func RequestNetwork() {
 			"msg": "success",
 		})
 	})
-	r.POST("/game/init", func(ctx *gin.Context) {
+	r.POST("/api/game/init", func(ctx *gin.Context) {
 		var gamerInfo GamerUserInfo
 		if err := ctx.ShouldBind(&gamerInfo); err != nil {
 			ctx.JSON(http.StatusBadRequest, gin.H{
@@ -85,7 +86,8 @@ func RequestNetwork() {
 			"error": errorMessage,
 		})
 	})
-	r.Run(":8081")
+	r.Run(":8080")
+	// r.RunTLS(":8080", "/usr/local/nginx/conf/cert/yptools.cn.pem", "/usr/local/nginx/conf/cert/yptools.cn.key")
 }
 
 // ———————————————————————————————— MODEL ————————————————————————————————
